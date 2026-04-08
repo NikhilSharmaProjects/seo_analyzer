@@ -1,3 +1,16 @@
+---
+title: SEO Analyzer
+colorFrom: blue
+colorTo: green
+sdk: docker
+app_port: 8000
+pinned: false
+tags:
+    - openenv
+    - reinforcement-learning
+    - seo
+---
+
 # AI SEO Optimization Environment (OpenEnv)
 
 This project is a reinforcement learning environment where an agent improves low-quality HTML into SEO-optimized HTML through iterative actions.
