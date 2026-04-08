@@ -6,7 +6,7 @@ app: server.app:app
 port: 8000
 description: RL SEO optimization environment for OpenEnv hackathon
 tags:
-	- openenv
-	- reinforcement-learning
-	- seo
+  - openenv
+  - reinforcement-learning
+  - seo
 

@@ -124,3 +124,8 @@ A: Static tools diagnose. This environment supports closed-loop optimization, wh
 
 Q: How can this scale to real-world usage?
 A: The same interface can run against larger HTML corpora, CMS page templates, and organization-specific SEO policies. New actions and scoring components can be added without breaking API contracts.
+
+## Troubleshooting (Windows)
+
+- If `/usr/bin/env` fails in PowerShell, run `prevalidationScript.ps1` instead of the bash script.
+- If Docker API connection fails, start Docker Desktop first, then rerun `docker build`.
