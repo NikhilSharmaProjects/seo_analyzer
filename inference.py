@@ -1,6 +1,6 @@
 """Hackathon submission inference script for the SEO OpenEnv environment.
 
-Required env vars:
+LLM env vars (optional; script falls back to deterministic heuristic policy if missing):
 - API_BASE_URL: LLM API endpoint
 - MODEL_NAME: LLM model identifier
 - HF_TOKEN: API token for LLM endpoint
@@ -70,8 +70,11 @@ def _heuristic_action(issues: list[str]) -> str:
 
 
 def _llm_action(
-    client: OpenAI, model_name: str, task: str, issues: list[str], score: float
+    client: Optional[OpenAI], model_name: str, task: str, issues: list[str], score: float
 ) -> tuple[str, Optional[str]]:
+    if client is None:
+        return _heuristic_action(issues), None
+
     prompt = (
         "You are controlling an SEO optimization environment. "
         "Return exactly one action from this list and nothing else: "
@@ -108,23 +111,34 @@ def _score_from_observation(obs: dict) -> float:
     return round(float(obs.get("seo_score", 0.0)) / 100.0, 4)
 
 
-def run_task(client: OpenAI, model_name: str, base_url: str, task: str, max_steps: int) -> None:
+def run_task(
+    client: Optional[OpenAI], model_name: str, base_url: str, task: str, max_steps: int
+) -> None:
     log_start(task=task, env=BENCHMARK, model=model_name)
 
     rewards: list[float] = []
     steps = 0
     success = False
     score_01 = 0.0
-
-    reset_obs = _post_json(base_url, f"/task/reset?task_id={task}", {})
-    issues = reset_obs.get("detected_issues", [])
-    done = bool(reset_obs.get("done", False))
-    score_01 = _score_from_observation(reset_obs)
+    done = False
+    issues: list[str] = []
 
     try:
+        reset_obs = _post_json(base_url, f"/task/reset?task_id={task}", {})
+        issues = reset_obs.get("detected_issues", [])
+        done = bool(reset_obs.get("done", False))
+        score_01 = _score_from_observation(reset_obs)
+
         while (not done) and steps < max_steps:
             action, action_error = _llm_action(client, model_name, task, issues, score_01 * 100.0)
-            step_obs = _post_json(base_url, "/task/step", {"action_type": action})
+            try:
+                step_obs = _post_json(base_url, "/task/step", {"action_type": action})
+            except Exception as exc:
+                steps += 1
+                rewards.append(0.0)
+                log_step(step=steps, action=action, reward=0.0, done=True, error=str(exc))
+                done = True
+                break
 
             reward = float(step_obs.get("reward") or 0.0)
             done = bool(step_obs.get("done", False))
@@ -138,26 +152,38 @@ def run_task(client: OpenAI, model_name: str, base_url: str, task: str, max_step
         success = (
             score_01 >= 0.70 if task == "easy" else score_01 >= 0.85 if task == "medium" else score_01 >= 0.95
         )
+    except Exception:
+        # Fail closed for this task without crashing the entire script.
+        pass
     finally:
         log_end(success=success, steps=steps, score=score_01, rewards=rewards)
 
 
 def main() -> None:
-    api_base_url = os.getenv("API_BASE_URL")
+    api_base_url = os.getenv("API_BASE_URL") 
     model_name = os.getenv("MODEL_NAME")
-    hf_token = os.getenv("HF_TOKEN")
+    hf_token = os.getenv("HF_TOKEN") 
     _ = os.getenv("LOCAL_IMAGE_NAME")  # present for checklist compatibility
 
-    if not api_base_url or not model_name or not hf_token:
-        raise RuntimeError("API_BASE_URL, MODEL_NAME, and HF_TOKEN must be set.")
-
     env_base_url = os.getenv("ENV_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
-    max_steps = int(os.getenv("MAX_STEPS", "12"))
+    try:
+        max_steps = int(os.getenv("MAX_STEPS", "12"))
+    except ValueError:
+        max_steps = 12
 
-    client = OpenAI(base_url=api_base_url, api_key=hf_token)
+    use_llm = bool(api_base_url and model_name and hf_token and OpenAI is not None)
+    model_label = model_name if use_llm and model_name else "deterministic-heuristic"
+
+    client: Optional[OpenAI] = None
+    if use_llm:
+        try:
+            client = OpenAI(base_url=api_base_url, api_key=hf_token)
+        except Exception:
+            client = None
+            model_label = "deterministic-heuristic"
 
     for task in TASKS:
-        run_task(client=client, model_name=model_name, base_url=env_base_url, task=task, max_steps=max_steps)
+        run_task(client=client, model_name=model_label, base_url=env_base_url, task=task, max_steps=max_steps)
 
 
 if __name__ == "__main__":

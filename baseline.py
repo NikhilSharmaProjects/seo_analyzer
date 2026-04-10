@@ -56,7 +56,7 @@ def _maybe_nvidia_action(issues: List[str]) -> str | None:
         load_dotenv()
 
     use_llm = os.getenv("USE_LLM_BASELINE", "0") == "1"
-    api_key = os.getenv("NVIDIA_API_KEY")
+    api_key = os.getenv("OPENAI_API_KEY")
     if not use_llm or OpenAI is None or not api_key:
         return None
 
