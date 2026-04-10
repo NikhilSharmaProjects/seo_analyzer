@@ -160,9 +160,11 @@ def run_task(
 
 
 def main() -> None:
-    api_base_url = os.getenv("API_BASE_URL") 
-    model_name = os.getenv("MODEL_NAME")
-    hf_token = os.getenv("HF_TOKEN") 
+    api_base_url = os.getenv("API_BASE_URL")
+    # Primary validator path: API_KEY + API_BASE_URL (LiteLLM proxy).
+    # Backward compatibility: fall back to HF_TOKEN if API_KEY is absent.
+    api_key = os.getenv("API_KEY") or os.getenv("HF_TOKEN")
+    model_name = os.getenv("MODEL_NAME") or os.getenv("OPENAI_MODEL")
     _ = os.getenv("LOCAL_IMAGE_NAME")  # present for checklist compatibility
 
     env_base_url = os.getenv("ENV_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
@@ -171,13 +173,13 @@ def main() -> None:
     except ValueError:
         max_steps = 12
 
-    use_llm = bool(api_base_url and model_name and hf_token and OpenAI is not None)
+    use_llm = bool(api_base_url and api_key)
     model_label = model_name if use_llm and model_name else "deterministic-heuristic"
 
     client: Optional[OpenAI] = None
     if use_llm:
         try:
-            client = OpenAI(base_url=api_base_url, api_key=hf_token)
+            client = OpenAI(base_url=api_base_url, api_key=api_key)
         except Exception:
             client = None
             model_label = "deterministic-heuristic"
